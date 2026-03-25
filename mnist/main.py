@@ -52,6 +52,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss.backward()
         if args.xla:
             xm.optimizer_step(optimizer)
+            xm.mark_step()
         else:
             optimizer.step()
         if batch_idx % args.log_interval == 0:
