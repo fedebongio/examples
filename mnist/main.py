@@ -7,7 +7,6 @@ from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
 
-# Optional: XLA/TPU support
 _XLA_AVAILABLE = False
 try:
     import torch_xla
@@ -51,15 +50,11 @@ def train(args, model, device, train_loader, optimizer, epoch):
         output = model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
-        # On XLA devices, use xm.optimizer_step to sync gradients properly.
-        # On other devices, use the standard optimizer.step().
         if args.xla:
             xm.optimizer_step(optimizer)
         else:
             optimizer.step()
         if batch_idx % args.log_interval == 0:
-            # On XLA, .item() triggers a device-to-host sync. We accept
-            # this cost at logging boundaries for readability.
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
@@ -113,7 +108,6 @@ def main():
                         help='For Saving the current Model')
     args = parser.parse_args()
 
-    # Device selection: --xla takes precedence, then torch.accelerator, then CPU.
     if args.xla:
         if not _XLA_AVAILABLE:
             raise RuntimeError(
@@ -121,13 +115,9 @@ def main():
                 "Install with: pip install torch_xla[tpu]"
             )
         device = xm.xla_device()
-        print(f"Using XLA device: {device}")
     else:
         use_accel = not args.no_accel and torch.accelerator.is_available()
-        if use_accel:
-            device = torch.accelerator.current_accelerator()
-        else:
-            device = torch.device("cpu")
+        device = torch.accelerator.current_accelerator() if use_accel else torch.device("cpu")
 
     torch.manual_seed(args.seed)
 
@@ -135,20 +125,12 @@ def main():
     test_kwargs = {'batch_size': args.test_batch_size}
 
     if args.xla:
-        # On XLA/TPU: pin_memory is not needed (no host-device DMA path),
-        # and persistent_workers helps avoid re-forking.
-        xla_kwargs = {'num_workers': 4,
-                      'persistent_workers': True,
-                      'shuffle': True,
-                      'drop_last': True}
-        train_kwargs.update(xla_kwargs)
-        # For test, don't drop_last so we evaluate every sample.
+        train_kwargs.update({'num_workers': 4, 'persistent_workers': True,
+                             'shuffle': True, 'drop_last': True})
         test_kwargs.update({'num_workers': 4, 'persistent_workers': True})
     elif not args.no_accel and torch.accelerator.is_available():
-        accel_kwargs = {'num_workers': 1,
-                        'persistent_workers': True,
-                        'pin_memory': True,
-                        'shuffle': True}
+        accel_kwargs = {'num_workers': 1, 'persistent_workers': True,
+                        'pin_memory': True, 'shuffle': True}
         train_kwargs.update(accel_kwargs)
         test_kwargs.update(accel_kwargs)
 
@@ -171,17 +153,12 @@ def main():
         train(args, model, device, train_loader, optimizer, epoch)
         test(model, device, test_loader)
         scheduler.step()
-        # On XLA, explicitly sync at epoch boundaries to ensure all
-        # device computations have completed.
         if args.xla:
             xm.mark_step()
 
     if args.save_model:
-        # On XLA devices, move the model to CPU before saving for portability.
         if args.xla:
-            model_to_save = model.cpu()
-            torch.save(model_to_save.state_dict(), "mnist_cnn.pt")
-            model.to(device)  # move back if needed
+            torch.save(model.cpu().state_dict(), "mnist_cnn.pt")
         else:
             torch.save(model.state_dict(), "mnist_cnn.pt")
 

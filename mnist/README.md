@@ -15,22 +15,13 @@ python main.py --no-accel
 
 ### TPU (via PyTorch/XLA)
 
-To train on a Google Cloud TPU VM:
-
 ```bash
-# Install PyTorch/XLA (adjust version as needed)
 pip install torch torchvision
 pip install 'torch_xla[tpu]'
-
-# Run with the --xla flag
 python main.py --xla
 ```
 
-**Notes on TPU training:**
-- The `--xla` flag selects the XLA device (TPU). It takes precedence over `torch.accelerator`.
-- `drop_last=True` is used for the training DataLoader to ensure fixed batch shapes, which avoids recompilation on TPU.
-- Model checkpoints saved with `--save-model` are moved to CPU before saving for cross-device portability.
-- For multi-device TPU training (e.g. all 4 chips on a v4-8), see the [PyTorch/XLA multiprocessing guide](https://docs.pytorch.org/xla/master/learn/pytorch-on-xla-devices.html).
+For multi-device TPU training, see the [PyTorch/XLA multiprocessing guide](https://docs.pytorch.org/xla/master/learn/pytorch-on-xla-devices.html).
 
 ### Options
 
