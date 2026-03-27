@@ -114,14 +114,14 @@ def loss_function(recon_x, x, mu, logvar):
 
 def train(epoch):
     model.train()
-    train_loss = 0
+    train_loss = torch.tensor(0.0, device=device)
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data)
         loss = loss_function(recon_batch, data, mu, logvar)
         loss.backward()
-        train_loss += loss.item()
+        train_loss += loss.detach()
         optimizer.step()
         if args.xla:
             torch_xla.sync()
@@ -132,7 +132,7 @@ def train(epoch):
                 loss.item() / len(data)))
 
     print('====> Epoch: {} Average loss: {:.4f}'.format(
-          epoch, train_loss / len(train_loader.dataset)))
+          epoch, train_loss.item() / len(train_loader.dataset)))
 
 
 def test(epoch):
